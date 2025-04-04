@@ -1,40 +1,98 @@
-import random
-from flask import Flask, jsonify
-from flask_cors import CORS
+import random  # Importa o módulo random para gerar números aleatórios
+from flask import Flask, jsonify, request  # Importa as classes Flask, jsonify e request do módulo flask
+from flask_cors import CORS  # Importa o módulo CORS para lidar com requisições de origens diferentes
+import firebase_admin  # Importa o módulo firebase_admin para interagir com o Firebase
+from firebase_admin import credentials, firestore  # Importa as classes credentials e firestore do módulo firebase_admin
+import os
+from dotenv import load_dotenv
 
-app = Flask(__name__)
-CORS(app)
+app = Flask(__name__)  # Cria uma instância do Flask
+CORS(app)  # Habilita o CORS para a aplicação Flask
 
-charadas = [
-    {'id': 1, 'charada':'O que tem boca, mas não fala?','resposta':'O fogão'},
-    {'id': 2, 'charada':'Um homem soltou dois peidos em sequência. Qual é o nome do filme?','resposta':'gás parzinho'},
-    {'id': 3, 'charada':'O que só trabalha se lhe batem na cabeça?','resposta':' o prego'},
-    {'id': 4, 'charada':'O que é, o que é? Quando se tira o R, fica leve como uma pena.','resposta':'a perna'},
-    {'id': 5, 'charada':'Qual é a Lua que nunca esta com fome?','resposta':' a lua cheia'},
-    {'id': 6, 'charada':'O que o aluno fala para a professora e gosta de receber dos pais?','resposta':'presente'},
-    {'id': 7, 'charada':'Qual é o céu que não tem estrelas?','resposta':' o céu da boca'},
-    {'id': 9, 'charada':'O que te pertence, mas as outras pessoas utilizam mais do que você','resposta':' o nome'},
-    {'id': 10, 'charada':'O que é, o que é? Quando dizemos o seu nome, ele deixa de existir.','resposta':' o silêncio.'},
-]
+FBKEY = json.loads.(os.getenv('CONFIG_FIREBASE'))
 
-@app.route('/')
+cred = credentials.Certificate('FBKEY')  # Carrega as credenciais do Firebase a partir de um arquivo JSON
+firebase_admin.initialize_app(cred)  # Inicializa o aplicativo Firebase
+db = firestore.client()  # Cria um cliente do Firestore para interagir com o banco de dados
+
+@app.route('/', methods=['GET'])  # Define a rota raiz da API e o método HTTP GET
 def index():
-    return '"CHARADAS MUITO ENGRAÇADAS GOOGLE BUSCAR"'
+    return '"CHARADAS MUITO ENGRAÇADAS GOOGLE BUSCAR"'  # Retorna uma mensagem simples
 
-@app.route('/charadas', methods=['GET'])
-def lista():
-    return jsonify(random.choice(charadas))
+@app.route('/charadas', methods=['GET'])  # Define a rota /charadas e o método HTTP GET
+def charada_aleatória():
+    charadas = []  # Inicializa uma lista vazia para armazenar as charadas
+    lista = db.collection('charadas').stream()  # Busca todas as charadas no Firestore
 
-@app.route('/charadas/id/<int:id>', methods=['GET'])
-def charada(id):
-    for charada in charadas:
-        if charada['id'] == id:
-            return jsonify(charada), 200
-    else:
-        return jsonify({'mensagem':'O que é o que é? você tentou achar mas não achou!'})
-    
-    
+    for item in lista:  # Itera sobre os documentos retornados pelo Firestore
+        charadas.append(item.to_dict())  # Converte cada documento em um dicionário e adiciona à lista
 
+    if charadas:  # Verifica se a lista de charadas não está vazia
+        return jsonify(random.choice(charadas)), 200  # Seleciona uma charada aleatória e a retorna em formato JSON
+    else:  # Caso a lista de charadas esteja vazia
+        return jsonify({'mensagem': 'o que é o que é? você tentou procurar e não achou!'}), 404  # Retorna uma mensagem de erro e o código de status 404
+
+@app.route('/charadas/<id>', methods=['GET'])  # Define a rota /charadas/<id> e o método HTTP GET
+def busca(id):
+    doc_ref = db.collection('charadas').document(id)  # Busca o documento da charada com o ID especificado no Firestore
+    doc = doc_ref.get().to_dict()  # Obtém o documento e o converte em um dicionário
+
+    if doc:  # Verifica se o documento foi encontrado
+        return jsonify(doc)  # Retorna a charada em formato JSON
+    else:  # Caso o documento não tenha sido encontrado
+        return jsonify({'mensagem': 'o que é o que é? você tentou procurar e não achou!'})  # Retorna uma mensagem de erro
+
+@app.route('/charadas', methods=['POST'])  # Define a rota /charadas e o método HTTP POST
+def adicionar_charada():
+    dados = request.json  # Obtém os dados da charada do corpo da requisição (JSON)
+
+    if "pergunta" not in dados or "resposta" not in dados:  # Verifica se os campos "pergunta" e "resposta" estão presentes
+        return jsonify({'mensagem': 'Erro. Campos pergunta e resposta são obrigatórios'}), 404  # Retorna uma mensagem de erro e o código de status 404
+
+    contador_ref = db.collection('controle_id').document('contador')  # Busca o documento do contador de IDs no Firestore
+    contador_doc = contador_ref.get().to_dict()  # Obtém o documento e o converte em um dicionário
+    ultimo_id = contador_doc.get('id')  # Obtém o último ID usado
+    novo_id = int(ultimo_id) + 1  # Gera um novo ID
+
+    contador_ref.update({'id': novo_id})  # Atualiza o contador de IDs no Firestore
+
+    db.collection('charadas').document(str(novo_id)).set({  # Adiciona a nova charada ao Firestore
+        "id": novo_id,
+        "pergunta": dados['pergunta'],
+        "resposta": dados['resposta']
+    })
+
+    return jsonify({'mensagem': 'Charada cadastrada com sucesso!'}), 201  # Retorna uma mensagem de sucesso e o código de status 201
+
+@app.route('/charadas/<id>', methods=['PUT'])  # Define a rota /charadas/<id> e o método HTTP PUT
+def alterar_charada(id):
+    dados = request.json  # Obtém os dados atualizados da charada do corpo da requisição (JSON)
+
+    if "pergunta" not in dados or "resposta" not in dados:  # Verifica se os campos "pergunta" e "resposta" estão presentes
+        return jsonify({'mensagem': 'Erro. Campos pergunta e resposta são obrigatórios'}), 404  # Retorna uma mensagem de erro e o código de status 404
+
+    doc_ref = db.collection('charadas').document(id)  # Busca o documento da charada com o ID especificado no Firestore
+    doc = doc_ref.get()  # Obtém o documento
+
+    if doc.exists:  # Verifica se o documento existe
+        doc_ref.update({  # Atualiza a charada no Firestore
+            "pergunta": dados['pergunta'],
+            "resposta": dados['resposta']
+        })
+        return jsonify({'mensagem': 'Charada atualizada com sucesso!'}), 201  # Retorna uma mensagem de sucesso e o código de status 201
+    else:  # Caso o documento não exista
+        return jsonify({'mensagem': 'Erro! - Charada não encontrada'}), 404  # Retorna uma mensagem de erro e o código de status 404
+
+@app.route('/charadas/<id>', methods=['DELETE'])  # Define a rota /charadas/<id> e o método HTTP DELETE
+def excluir_charada(id):
+    doc_ref = db.collection('charadas').document(id)  # Busca o documento da charada com o ID especificado no Firestore
+    doc = doc_ref.get()  # Obtém o documento
+
+    if not doc.exists:  # Verifica se o documento não existe
+        return jsonify({'mensagem': 'Erro, charada não encontrada!'})  # Retorna uma mensagem de erro
+
+    doc_ref.delete()  # Exclui a charada do Firestore
+    return jsonify({'mensagem': 'Charada excluída com sucesso!'})  # Retorna uma mensagem de sucesso
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)  # Inicia o aplicativo Flask em modo de depuração
