@@ -10,9 +10,11 @@ import json
 app = Flask(__name__)  # Cria uma instância do Flask
 CORS(app)  # Habilita o CORS para a aplicação Flask
 
+load_dotenv()
+
 FBKEY = json.loads(os.getenv('CONFIG_FIREBASE'))
 
-cred = credentials.Certificate('FBKEY')  # Carrega as credenciais do Firebase a partir de um arquivo JSON
+cred = credentials.Certificate(FBKEY)  # Carrega as credenciais do Firebase a partir de um arquivo JSON
 firebase_admin.initialize_app(cred)  # Inicializa o aplicativo Firebase
 db = firestore.client()  # Cria um cliente do Firestore para interagir com o banco de dados
 
