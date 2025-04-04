@@ -5,6 +5,7 @@ import firebase_admin  # Importa o módulo firebase_admin para interagir com o F
 from firebase_admin import credentials, firestore  # Importa as classes credentials e firestore do módulo firebase_admin
 import os
 from dotenv import load_dotenv
+import json
 
 app = Flask(__name__)  # Cria uma instância do Flask
 CORS(app)  # Habilita o CORS para a aplicação Flask
