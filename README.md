@@ -1,4 +1,4 @@
-# API de Charadas Engracadas
+# API de Charadas Engraçadas
 
 ## Descrição
 Esta e uma API simples desenvolvida com Flask que fornece charadas aleatorias ou especificas por ID.
